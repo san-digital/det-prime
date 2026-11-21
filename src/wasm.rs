@@ -30,7 +30,8 @@ pub fn hash_to_prime_be_32(digest: &[u8; 32], out_prime: &mut [u8; 32]) -> Resul
 ///
 /// Writes the canonical root `0 <= r <= (p - 1)/2` into `out_root` and returns `Ok(true)`
 /// when `a` is a square mod `p`; clears `out_root` and returns `Ok(false)` when `a` is a
-/// non-residue; returns `Err(_)` on invalid or composite modulus `p` or `a >= p`.
+/// non-residue; returns `Err(_)` on an even or tiny modulus, `a >= p`, or a modulus detected
+/// to be composite. `p` must be prime; see [`sqrt_mod_prime`] for what a composite `p` yields.
 pub fn sqrt_mod_prime_be_32(
     a_bytes: &[u8; 32],
     p_bytes: &[u8; 32],
