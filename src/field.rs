@@ -114,7 +114,8 @@ pub fn least_nonresidue<const LIMBS: usize>(p: &Uint<LIMBS>) -> Result<u64, Erro
 /// Given `0 <= a < p`, returns:
 /// - `Ok(Some(r))` with `0 <= r <= (p - 1)/2` and `r^2 == a (mod p)` if `a` is a square mod `p`,
 /// - `Ok(None)` if `a` is a quadratic non-residue mod `p`,
-/// - `Err(_)` if `p` is even or `< 3`, `a >= p`, or `p` is detected to be composite.
+/// - `Err(_)` if `p` is even, `< 3`, or wider than 4096 bits, `a >= p`, or `p` is detected to be
+///   composite.
 ///
 /// `p` must be prime: this function does not run a primality test. A composite `p` is
 /// rejected only when it breaks Euler's criterion or the Tonelli-Shanks invariants, so it
