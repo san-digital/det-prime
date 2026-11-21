@@ -1,13 +1,21 @@
-use crate::bounds::{bach_witness_bound, lls_nonresidue_bound, progression_prime_bound};
+use crate::bounds::{
+    bach_witness_bound, lls_nonresidue_bound, progression_prime_bound, MAX_SIEVE_BITS,
+};
 use crate::primality::{is_prime, is_prime_u64};
 use crate::sieve::PrimeIter;
 use crate::uint::{MontCtx, Uint, U256};
 use crate::Error;
 
-/// Computes the Jacobi symbol `J(a | n)` in `{-1, 0, 1}` for `n` odd (`n >= 3`).
+/// Computes the Jacobi symbol `J(a | n)` in `{-1, 0, 1}` for odd `n` (`J(a | 1) == 1`;
+/// returns `0` when `n == 0` or `n` is even).
 #[inline]
 pub fn jacobi_u64(mut a: u64, mut n: u64) -> i8 {
-    debug_assert!(n >= 3 && (n & 1) == 1);
+    if n == 1 {
+        return 1;
+    }
+    if (n & 1) == 0 {
+        return 0;
+    }
     a %= n;
     let mut res = 1i8;
     while a != 0 {
@@ -32,10 +40,16 @@ pub fn jacobi_u64(mut a: u64, mut n: u64) -> i8 {
     }
 }
 
-/// Computes `J(q | p)` for a prime `q >= 2` and an odd `Uint<LIMBS>` `p >= 3`.
+/// Computes `J(q | p)` for a prime `q >= 2` and an odd `Uint<LIMBS>` `p >= 1`
+/// (returns `0` if `q < 2` or `p` is even).
 #[inline]
 pub fn jacobi_prime_mod_odd<const LIMBS: usize>(q: u64, p: &Uint<LIMBS>) -> i8 {
-    debug_assert!(p.is_odd());
+    if p.is_one() {
+        return 1;
+    }
+    if LIMBS == 0 || p.is_even() || q < 2 {
+        return 0;
+    }
     if q == 2 {
         let p8 = p.0[0] & 7;
         return if p8 == 1 || p8 == 7 { 1 } else { -1 };
@@ -62,6 +76,9 @@ pub fn jacobi_prime_mod_odd<const LIMBS: usize>(q: u64, p: &Uint<LIMBS>) -> i8 {
 pub fn least_nonresidue<const LIMBS: usize>(p: &Uint<LIMBS>) -> Result<u64, Error> {
     if p.is_even() || *p <= Uint::TWO {
         return Err(Error::InvalidModulus);
+    }
+    if p.bits() > MAX_SIEVE_BITS {
+        return Err(Error::Overflow);
     }
     let ctx = MontCtx::new(*p).ok_or(Error::InvalidModulus)?;
     let half = p.wrapping_sub(&Uint::ONE).shr(1);
@@ -104,6 +121,9 @@ pub fn sqrt_mod_prime<const LIMBS: usize>(
 ) -> Result<Option<Uint<LIMBS>>, Error> {
     if p.is_even() || *p <= Uint::TWO {
         return Err(Error::InvalidModulus);
+    }
+    if p.bits() > MAX_SIEVE_BITS {
+        return Err(Error::Overflow);
     }
     if a >= p {
         return Err(Error::OutOfRange);
@@ -186,6 +206,9 @@ pub fn next_prime_bounded<const LIMBS: usize>(
     start: &Uint<LIMBS>,
     max_odd_steps: u32,
 ) -> Result<(Uint<LIMBS>, u32), Error> {
+    if LIMBS == 0 {
+        return Err(Error::Overflow);
+    }
     if max_odd_steps == 0 {
         return Err(Error::StepBudgetExceeded);
     }

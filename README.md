@@ -2,7 +2,7 @@
 
 Deterministic, zero-entropy primality testing, transcript-to-prime hashing, primes in arithmetic progressions, and modular square roots for `#![no_std]` Rust and WebAssembly (`wasm32-unknown-unknown`).
 
-Zero runtime dependencies. `#![forbid(unsafe_code)]`. Stack-allocated fixed-width limbs up to 4096 bits. Backed by Lean 4 proofs in [`lean/DetPrime/`](lean/DetPrime) and documented assumption boundaries in [`PROOF.md`](PROOF.md).
+Zero runtime dependencies. `#![forbid(unsafe_code)]`. Stack-allocated fixed-width limbs up to 4096 bits. Backed by Lean 4 proofs in [`lean/DetPrime/`](https://github.com/san-digital/det-prime/tree/main/lean/DetPrime) and documented assumption boundaries in [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md).
 
 ## Why This Exists
 
@@ -24,14 +24,14 @@ Standard cryptographic and zero-knowledge libraries use probabilistic Miller-Rab
 
 ```toml
 [dependencies]
-det-prime = { git = "https://github.com/san-digital/det-prime" }
+det-prime = "0.1"
 ```
 
 For `#![no_std]` or `wasm32-unknown-unknown` targets:
 
 ```toml
 [dependencies]
-det-prime = { git = "https://github.com/san-digital/det-prime", default-features = false }
+det-prime = { version = "0.1", default-features = false }
 ```
 
 ### Deterministic Primality and Adversarial Witness Extraction
@@ -101,7 +101,7 @@ Single-core `cargo run --release --example timing` on Apple Silicon (M-series, `
 
 ## Soundness and Lean 4 Verification
 
-`det-prime` splits its mathematical claims into three explicit layers (detailed in [`PROOF.md`](PROOF.md)):
+`det-prime` splits its mathematical claims into three explicit layers (detailed in [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md)):
 
 1. **Local Lean 4 proofs (`lean/DetPrime/`, kernel-replayed via `leanchecker` with zero `sorryAx`):**
    - `LogBounds.lean`: Proves the pure-integer `u128` rational bound `ln_upper_scaled` strictly encloses `ln(n)` and that `bach_bound_from_km` and `lls_bound_from_km` enclose `2 * (ln n)^2` and `(ln p)^2`.
@@ -130,4 +130,4 @@ MATHLIB_DIR=/path/to/mathlib4 ./lean/replay.sh
 
 ## License
 
-Apache-2.0. See [`LICENSE`](LICENSE).
+Apache-2.0. See [`LICENSE`](https://github.com/san-digital/det-prime/blob/main/LICENSE).

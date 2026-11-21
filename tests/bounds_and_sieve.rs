@@ -70,4 +70,15 @@ fn integer_log_bounds_enclose_true_logarithms_tightly() {
     let max256 = U256::from_limbs([u64::MAX; 4]);
     let b256 = bach_witness_bound(&max256);
     assert_eq!(b256, 62_973);
+
+    // Degenerate zero-modulus / zero-limb public API guards never panic.
+    assert_eq!(det_prime::jacobi_u64(5, 0), 0);
+    assert_eq!(det_prime::jacobi_u64(5, 1), 1);
+    assert_eq!(det_prime::jacobi_u64(5, 4), 0);
+    assert_eq!(det_prime::jacobi_prime_mod_odd(0, &max256), 0);
+    assert_eq!(det_prime::jacobi_prime_mod_odd(3, &Uint::<0>::ZERO), 0);
+    assert_eq!(
+        det_prime::next_prime_bounded(&Uint::<0>::ZERO, 5),
+        Err(det_prime::Error::Overflow)
+    );
 }
