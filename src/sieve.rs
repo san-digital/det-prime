@@ -1,4 +1,6 @@
-/// Maximum supported sieve limit (`16,500,000`), exceeding `2 * (ln(2^4096))^2` (`16,121,365`).
+//! Stack-only segmented sieve that yields the small primes used as test bases.
+
+/// Maximum supported sieve limit (`16,500,000`), above `2 * (ln(2^4096))^2` (about `16,121,328`).
 pub const MAX_SIEVE_LIMIT: u64 = 16_500_000;
 
 const SEED_COUNT: usize = 559;

@@ -1,3 +1,5 @@
+//! Fixed-width unsigned integers on the stack and Montgomery multiplication.
+
 use core::cmp::Ordering;
 use core::fmt;
 
