@@ -26,6 +26,11 @@ if [[ -z "${MATHLIB_DIR:-}" ]]; then
   exit 1
 fi
 
+if [[ -n "${ALPOGE_STATEMENTS:-}" && ! -f "${ALPOGE_STATEMENTS}" ]]; then
+  echo "error: ALPOGE_STATEMENTS=${ALPOGE_STATEMENTS} is not a file" >&2
+  exit 1
+fi
+
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/det-prime-lean.XXXXXX")"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 mkdir -p "$BUILD_DIR/DetPrime"
@@ -46,24 +51,37 @@ lake env bash -c '
   echo "[axioms] checking foundational axiom footprint"
   AXIOM_OUT="$(lean --stdin <<'"'"'EOS'"'"'
 import DetPrime.BridgeAudit
+#print axioms DetPrime.lnUpperScaled_strict_bound
 #print axioms DetPrime.bachBound_sound
 #print axioms DetPrime.llsBound_sound
+#print axioms DetPrime.bachBound_u256_max
+#print axioms DetPrime.prime_witness_of_coprime_witness
+#print axioms DetPrime.prime_is_strong_probable_prime
 #print axioms DetPrime.odd_composite_exists_euler_jacobi_witness
 #print axioms DetPrime.strong_liar_mem_euler_jacobi
 #print axioms DetPrime.tonelli_shanks_init
 #print axioms DetPrime.tonelli_shanks_step
+#print axioms DetPrime.tonelli_shanks_done
+#print axioms DetPrime.sqrt_three_mod_four
+#print axioms DetPrime.prime_nonresidue_witness
 #print axioms DetPrime.miller_bach_prime_iff_all_prime_bases
 #print axioms DetPrime.least_nonresidue_has_prime_witness
 EOS
 )"
   echo "$AXIOM_OUT"
-  if echo "$AXIOM_OUT" | grep -q "sorryAx"; then
-    echo "error: sorryAx detected in axiom footprint" >&2
+  # Long axiom lists wrap across lines, so join the output before extracting each list.
+  # Anything outside the three standard axioms (sorryAx, Lean.ofReduceBool from
+  # native_decide, or a custom axiom) fails the audit.
+  NONSTANDARD="$(printf "%s\n" "$AXIOM_OUT" | tr "\n" " " | grep -o "\[[^]]*\]" | tr -d "[]" \
+    | tr "," "\n" | sed "s/^ *//; s/ *$//" \
+    | grep -v -x -e "" -e "propext" -e "Classical.choice" -e "Quot.sound" || true)"
+  if [[ -n "$NONSTANDARD" ]]; then
+    echo "error: non-standard axioms in footprint: $(echo $NONSTANDARD)" >&2
     exit 1
   fi
 '
 
-if [[ -n "${ALPOGE_STATEMENTS:-}" && -f "${ALPOGE_STATEMENTS}" ]]; then
+if [[ -n "${ALPOGE_STATEMENTS:-}" ]]; then
   echo "[statements] verifying definitional equality with ${ALPOGE_STATEMENTS}"
   cp "${ALPOGE_STATEMENTS}" "$BUILD_DIR/UpstreamStatements.lean"
   lake env bash -c '

@@ -52,6 +52,8 @@ With Lean `v4.33.1` (or compatible Mathlib4 checkout) installed:
 MATHLIB_DIR=/path/to/mathlib4 ./lean/replay.sh
 ```
 
+The `lean` CI job runs the same script against Mathlib `v4.33.1` on every push and pull request. The axiom audit accepts only `propext`, `Classical.choice`, and `Quot.sound`, so `sorryAx`, `Lean.ofReduceBool` (`native_decide`), and custom axioms all fail it.
+
 To include the `rfl` definitional-equality check against Alpoge's `Statements.lean`:
 
 ```sh
@@ -62,7 +64,7 @@ MATHLIB_DIR=/path/to/mathlib4 ALPOGE_STATEMENTS=/path/to/Statements.lean ./lean/
 
 1. Eric Bach, "Explicit bounds for primality testing and related problems," *Mathematics of Computation* 55(191), 355-380 (1990).
 2. Youness Lamzouri, Xiannan Li, and Kannan Soundararajan, "Conditional bounds for the least quadratic non-residue and related problems," *Mathematics of Computation* 84(295), 2391-2412 (2015).
-3. Emanuel Carneiro, Micah B. Milinovich, and Kannan Soundararajan, "Fourier optimization and prime gaps," *Forum Mathematicum* 31(4), 859-880 (2019).
+3. Emanuel Carneiro, Micah B. Milinovich, and Kannan Soundararajan, "Fourier optimization and prime gaps," *Commentarii Mathematici Helvetici* 94(3), 533-568 (2019), doi:10.4171/CMH/467.
 4. Francois Arnault, "Constructing Carmichael numbers which are strong pseudoprimes to several bases," *Journal of Symbolic Computation* 20(2), 151-161 (1995).
 5. Jonathan Sorenson and Jonathan Webster, "Strong pseudoprimes to twelve prime bases," *Mathematics of Computation* 86(304), 985-1003 (2017).
 6. Levent Alpoge, *On the Riemann Hypothesis* (`remark.pdf` and `Statements.lean`, 20 November 2026); independent Lean 4 kernel replay logs maintained by Andrew Sutherland (`mit.edu/~drew`).

@@ -11,7 +11,7 @@ Connects the analytic hypotheses of Alpoge's `Statements.lean` (`DirichletLNonva
 and `RiemannZetaZerosOnLine`) and published explicit analytic number theory bounds:
 - Bach (1990), Mathematics of Computation 55(191), Theorem 2
 - Lamzouri, Li, and Soundararajan (2015), Mathematics of Computation 84(295), Corollaries 1.1 & 1.2
-- Carneiro, Milinovich, and Soundararajan (2019), Forum Mathematicum 31(4), Theorem 5
+- Carneiro, Milinovich, and Soundararajan (2019), Commentarii Mathematici Helvetici 94(3), Theorem 5
 
 to the exact integer logarithm enclosures (`DetPrime.LogBounds`), subgroup and prime-base
 reductions (`DetPrime.PrimeWitness`), and Tonelli-Shanks invariants (`DetPrime.TonelliShanks`)
