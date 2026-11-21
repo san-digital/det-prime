@@ -18,6 +18,10 @@ fn verifies_standard_cryptographic_and_zk_primes() {
         U256::from_hex("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f").unwrap();
     assert_eq!(secp.bits(), 256);
     assert!(is_prime(&secp));
+    // floor(2 * (ln p)^2) = 62,973, and there are 6,316 primes up to it (base 2 included).
+    let secp_cert = verify_miller_bach(&secp).unwrap();
+    assert_eq!(secp_cert.prime_base_bound, 62_973);
+    assert_eq!(secp_cert.bases_tested, 6_316);
 
     // NIST P-256 field prime
     let p256 =
@@ -61,6 +65,10 @@ fn tonelli_shanks_handles_high_two_adicity_zk_fields() {
     let z = least_nonresidue(&stark).unwrap();
     assert_eq!(z, 3); // 3 is the canonical generator / non-residue of Stark252.
     assert_eq!(sqrt_mod_prime(&U256::from_u64(z), &stark).unwrap(), None);
+    assert_eq!(
+        sqrt_mod_prime(&U256::from_u64(9), &stark).unwrap(),
+        Some(U256::from_u64(3))
+    );
 
     let ctx = MontCtx::new(stark).unwrap();
     for sample in [2u64, 4, 9, 123_456_789, 9_999_999_999_999] {

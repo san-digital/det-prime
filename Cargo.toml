@@ -4,13 +4,23 @@ version = "0.1.1"
 edition = "2021"
 rust-version = "1.81"
 license = "Apache-2.0"
-description = "Deterministic, zero-entropy primality testing, prime hashing, and modular square roots backed by Dirichlet-GRH witness bounds."
+description = "Primality testing without randomness for no_std and Wasm: always correct below 2^64, correct above it assuming GRH. Also hash-to-prime and modular square roots."
 repository = "https://github.com/san-digital/det-prime"
 homepage = "https://github.com/san-digital/det-prime"
 documentation = "https://docs.rs/det-prime"
 readme = "README.md"
 keywords = ["primality", "cryptography", "no-std", "wasm", "number-theory"]
 categories = ["cryptography", "mathematics", "no-std", "wasm"]
+include = [
+    "/src/",
+    "/tests/",
+    "/examples/",
+    "/lean/",
+    "/README.md",
+    "/PROOF.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
 
 [features]
 default = ["std"]

@@ -1,132 +1,120 @@
 # det-prime
 
-Deterministic, zero-entropy primality testing, transcript-to-prime hashing, primes in arithmetic progressions, and modular square roots for `#![no_std]` Rust and WebAssembly (`wasm32-unknown-unknown`).
+[![crates.io](https://img.shields.io/crates/v/det-prime.svg)](https://crates.io/crates/det-prime)
+[![docs.rs](https://img.shields.io/docsrs/det-prime)](https://docs.rs/det-prime)
+[![CI](https://github.com/san-digital/det-prime/actions/workflows/ci.yml/badge.svg)](https://github.com/san-digital/det-prime/actions/workflows/ci.yml)
 
-Zero runtime dependencies. `#![forbid(unsafe_code)]`. Stack-allocated fixed-width limbs up to 4096 bits. Backed by Lean 4 proofs in [`lean/DetPrime/`](https://github.com/san-digital/det-prime/tree/main/lean/DetPrime) and documented assumption boundaries in [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md).
+det-prime tells you whether a number is prime without using any randomness, so the same input gives the same answer on every machine. It also computes square roots modulo a prime, maps a hash to a prime, and finds primes in arithmetic progressions.
 
-## Why This Exists
+It is meant for Rust code that has no random number source, or where every node must agree on the result: WebAssembly guests, blockchain and zkVM code, and checks on public parameters such as curve moduli. It is `#![no_std]`, has no dependencies and no `unsafe`, and works on stack-allocated integers up to 4096 bits.
 
-Standard cryptographic and zero-knowledge libraries use probabilistic Miller-Rabin (`k` random rounds) and randomized Tonelli-Shanks (rejection-sampling a quadratic non-residue). That creates three recurring engineering problems:
-
-1. **Entropy-free execution environments:** `wasm32-unknown-unknown` guests, smart-contract VMs, zkVMs, and consensus state transitions have no OS CSPRNG and require bit-identical execution across validators.
-2. **Adversarial parameter validation:** Fixed small-base Miller-Rabin tables fail against constructed strong pseudoprimes (Arnault's 46-digit composite passes all 11 prime bases `2..=31`; Sorenson-Webster's 82-bit composite passes `2..=41`) and Carmichael numbers.
-3. **Verifiable delay functions and Fiat-Shamir challenges:** Wesolowski VDF verifiers and RSA accumulator transcripts must map a 256-bit hash digest deterministically to a prime challenge without interactive randomness.
-
-`det-prime` replaces random witness sampling with deterministic prime-base bounds:
-
-- **`n < 2^64` (`is_prime_u64`):** Unconditional 7-base Sinclair witness set (`[2, 325, 9375, 28178, 450775, 9780504, 1795265022]`), exact across all 64-bit integers.
-- **`2^64 <= n < 2^4096` (`is_prime`, `verify_miller_bach`):** Tests prime bases `p <= floor(2 * ln_hi(n)^2)` via 4-bit windowed CIOS Montgomery multiplication, returning either a `PrimalityCertificate` or an explicit `CompositeWitness` (`Even`, `PrimeFactor(p)`, or `StrongWitness(p)`).
-- **`sqrt_mod_prime` and `least_nonresidue`:** Finds the least prime quadratic non-residue `q <= floor(ln_hi(p)^2)` deterministically and runs Tonelli-Shanks without randomness, returning the canonical root `r <= (p - 1) / 2` after verifying `r^2 == a (mod p)`.
-- **`hash_to_prime_256`:** Maps any 32-byte digest deterministically to a 255-bit odd prime along a bounded candidate sequence.
-- **`prime_in_progression_u64`:** Finds the smallest prime `p == a (mod q)` within `(phi(q) * ln q)^2` (for example, NTT-friendly primes `p == 1 (mod 2^k)`).
-
-## Usage
+## Install
 
 ```toml
 [dependencies]
 det-prime = "0.1"
 ```
 
-For `#![no_std]` or `wasm32-unknown-unknown` targets:
+For `no_std` or `wasm32-unknown-unknown`, turn off the default `std` feature:
 
 ```toml
 [dependencies]
 det-prime = { version = "0.1", default-features = false }
 ```
 
-### Deterministic Primality and Adversarial Witness Extraction
+## Example
 
 ```rust
-use det_prime::{is_prime, verify_miller_bach, CompositeWitness, U256};
+use det_prime::{hash_to_prime_256, is_prime, is_prime_u64, sqrt_mod_prime, U256};
 
-// secp256k1 field prime: 2^256 - 2^32 - 977
-let secp = U256::from_hex(
-    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
-).unwrap();
-assert!(is_prime(&secp));
-let cert = verify_miller_bach(&secp).unwrap();
-assert_eq!(cert.prime_base_bound, 62_973);
+// 64-bit numbers.
+assert!(is_prime_u64(18_446_744_073_709_551_557)); // largest prime below 2^64
+assert!(!is_prime_u64(3_825_123_056_546_413_051)); // passes Miller-Rabin for bases 2..=31
 
-// Arnault's 46-digit strong pseudoprime to all 11 prime bases 2..=31:
-let arnault = U256::from_decimal(
-    "1195068768795265792518361315725116351898245581",
+// Larger numbers use fixed-width types: U128, U256, ..., U4096.
+let p = U256::from_hex(
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f", // secp256k1 field prime
 ).unwrap();
-assert_eq!(
-    verify_miller_bach(&arnault),
-    Err(CompositeWitness::StrongWitness(37)),
-);
+assert!(is_prime(&p));
+
+// Square root of 9 modulo p.
+assert_eq!(sqrt_mod_prime(&U256::from_u64(9), &p).unwrap(), Some(U256::from_u64(3)));
+
+// Map a 32-byte hash to a 255-bit prime.
+let (prime, _candidates_tried) = hash_to_prime_256(&[0x42; 32]).unwrap();
+assert_eq!(prime.bits(), 255);
 ```
 
-### Deterministic VDF / Fiat-Shamir Hash-to-Prime
+[`verify_miller_bach`](https://docs.rs/det-prime/latest/det_prime/fn.verify_miller_bach.html) does the same test as `is_prime` but tells you why a number is composite. Here it catches a number built to fool Miller-Rabin with every prime base up to 31:
 
 ```rust
-use det_prime::{hash_to_prime_256, is_prime};
+use det_prime::{verify_miller_bach, CompositeWitness, U256};
 
-let transcript_digest = [0x42u8; 32];
-let (challenge_prime, odd_steps) = hash_to_prime_256(&transcript_digest).unwrap();
-assert_eq!(challenge_prime.bits(), 255);
-assert!(is_prime(&challenge_prime));
-assert!(odd_steps >= 1);
+let n = U256::from_decimal("1195068768795265792518361315725116351898245581").unwrap();
+assert_eq!(verify_miller_bach(&n), Err(CompositeWitness::StrongWitness(37)));
 ```
 
-### Deterministic Tonelli-Shanks on High 2-Adicity ZK Fields
+## How far you can trust the answers
 
-```rust
-use det_prime::{least_nonresidue, sqrt_mod_prime, U256};
+| Function | Guarantee |
+| :--- | :--- |
+| `is_prime_u64`, and `is_prime` for `n < 2^64` | Always correct. No unproven assumption. |
+| `is_prime` and `verify_miller_bach` for `n >= 2^64` | A prime is always accepted. A composite is always rejected **if the Generalized Riemann Hypothesis (GRH) is true**. |
+| `hash_to_prime_256` | Uses `is_prime`, so the output is prime if GRH is true. |
+| `sqrt_mod_prime`, `least_nonresidue`, `prime_in_progression_u64` | Every answer is checked before it is returned, so for a prime modulus an answer is never wrong. GRH is only needed to promise that the search finds one within its limit; if GRH were false, these could return an error where an answer exists. |
 
-// Stark252 prime: p = 2^251 + 17 * 2^192 + 1 (2-adicity 192)
-let stark = U256::from_hex(
-    "0800000000000011000000000000000000000000000000000000000000000001",
-).unwrap();
-assert_eq!(least_nonresidue(&stark).unwrap(), 3);
+For large numbers the crate runs Miller-Rabin with every prime base up to about `2 * (ln n)^2`. Eric Bach proved in 1990 that this is enough, but only assuming GRH, which is a famous open problem. A Lean proof of GRH was claimed on 20 November 2026 and is still under review (see [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md)). Until it is accepted, treat any result above `2^64` as conditional on GRH. If you need a proof of primality that rests on no hypothesis, use a primality certificate (for example ECPP) instead.
 
-let root = sqrt_mod_prime(&U256::from_u64(9), &stark).unwrap().unwrap();
-assert_eq!(root, U256::from_u64(3));
-```
+## When to use it
 
-## Measured Timings
+- You need the same answer on every machine with no randomness: Wasm guests, consensus code, zkVMs.
+- You are checking public numbers that someone may have chosen to fool you, such as a modulus in a protocol message. A fixed table of Miller-Rabin bases can be beaten by a constructed pseudoprime; here the number of bases grows with the input.
+- You want `no_std`, zero dependencies, and no `unsafe`.
 
-Single-core `cargo run --release --example timing` on Apple Silicon (M-series, `rustc 1.94.0`):
+## When not to use it
 
-| Operation | Input | Latency |
+- **On secret values.** The code is not constant-time: its running time and branches depend on the input. Do not use it to generate RSA keys or to test any number that must stay secret.
+- When you need an unconditional proof that a number above `2^64` is prime (see above).
+- When speed matters more than determinism. A 256-bit prime takes tens of milliseconds because about 6,300 bases are tried; a few random Miller-Rabin rounds are much faster.
+- For numbers above 4096 bits, which are not supported.
+
+## What is in the crate
+
+| Item | What it does |
+| :--- | :--- |
+| `is_prime_u64(n)` | Primality of a `u64`. |
+| `is_prime(&n)` | Primality of a `U128` ... `U4096` (any `Uint<LIMBS>`). |
+| `verify_miller_bach(&n)` | Like `is_prime`, but returns the base or factor that proves `n` composite. |
+| `sqrt_mod_prime(&a, &p)` | Square root of `a` modulo a prime `p` (the smaller of the two roots). |
+| `least_nonresidue(&p)` | Smallest quadratic non-residue modulo a prime `p`. |
+| `hash_to_prime_256(&digest)` | 32-byte hash to a 255-bit prime, e.g. for VDF or Fiat-Shamir challenges. |
+| `prime_in_progression_u64(q, a)` | Smallest prime `p` with `p % q == a`, e.g. NTT-friendly primes `p == 1 (mod 2^k)`. |
+| `is_prime_be_32`, `sqrt_mod_prime_be_32`, ... | The same functions on big-endian byte buffers. |
+
+Integers parse with `Uint::from_hex`, `Uint::from_decimal`, and `Uint::from_be_bytes`. Full API docs are on [docs.rs](https://docs.rs/det-prime).
+
+## Performance
+
+Single core, `cargo run --release --example timing`, Apple Silicon (M-series), `rustc 1.94.0`:
+
+| Operation | Input | Time |
 | :--- | :--- | :--- |
-| `is_prime_u64` | 64-bit odd integers (10,000 calls) | **0.97 us / call** |
-| `is_prime` (`U256`) | 256-bit odd composite | **< 0.01 us / call** |
-| `is_prime` (`U256`) | 256-bit `secp256k1` prime (all 6,301 prime bases `<= 62,973`) | **36.3 ms** |
-| `hash_to_prime_256` | 32-byte digest -> 255-bit prime (108 odd steps) | **30.2 ms** |
-| `sqrt_mod_prime` (`U256`) | Stark252 (`2^192 \| p - 1`, deterministic Tonelli-Shanks) | **0.72 ms / call** |
-| `prime_in_progression_u64` | `q = 2^20, a = 1` -> `p = 7,340,033` | **1.88 us** |
+| `is_prime_u64` | 64-bit odd integers (10,000 calls) | 0.97 us per call |
+| `is_prime` (`U256`) | 256-bit odd composite | < 0.01 us per call |
+| `is_prime` (`U256`) | secp256k1 field prime (all 6,316 prime bases up to 62,973) | 36.3 ms |
+| `hash_to_prime_256` | 32-byte digest to 255-bit prime (108 candidates) | 30.2 ms |
+| `sqrt_mod_prime` (`U256`) | Stark252 prime (`2^192` divides `p - 1`) | 0.72 ms per call |
+| `prime_in_progression_u64` | `q = 2^20, a = 1`, giving `p = 7,340,033` | 1.88 us |
 
-*Security note:* `det-prime` is built for deterministic verification of public parameters, consensus inputs, curve/field moduli, and public VDF/Fiat-Shamir transcripts. Branching and early exit on composite witnesses are data-dependent; do not use `det-prime` to generate secret RSA key factors where constant-time execution is required.
+Composites are usually rejected by the first base, so they are fast. Primes are slow because every base must be tried.
 
-## Soundness and Lean 4 Verification
+## Proofs
 
-`det-prime` splits its mathematical claims into three explicit layers (detailed in [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md)):
+The parts that do not need GRH are proved in Lean 4 in [`lean/DetPrime/`](https://github.com/san-digital/det-prime/tree/main/lean/DetPrime): the integer bounds on `ln n` used to pick the number of bases, the fact that testing prime bases is enough, the step from strong liars to Euler-Jacobi liars, and the Tonelli-Shanks invariants. CI compiles and replays these proofs on every pull request. The published analytic bounds (Bach; Lamzouri, Li and Soundararajan) and GRH itself are stated as assumptions, not proved. [`PROOF.md`](https://github.com/san-digital/det-prime/blob/main/PROOF.md) lists exactly what is proved and what is assumed.
 
-1. **Local Lean 4 proofs (`lean/DetPrime/`, kernel-replayed via `leanchecker` with zero `sorryAx`):**
-   - `LogBounds.lean`: Proves the pure-integer `u128` rational bound `ln_upper_scaled` strictly encloses `ln(n)` and that `bach_bound_from_km` and `lls_bound_from_km` enclose `2 * (ln n)^2` and `(ln p)^2`.
-   - `PrimeWitness.lean`: Proves subgroup prime-factor witness reduction, Solovay-Strassen properness of the Euler-Jacobi subgroup for all odd composites, Monier-Rabin strong-liar inclusion in the Euler-Jacobi subgroup, and zero false negatives on primes.
-   - `TonelliShanks.lean`: Proves prime non-residue reduction, the `p == 3 (mod 4)` branch, and the Tonelli-Shanks loop step invariant.
-   - `BridgeAudit.lean`: Composes the local proofs with the analytic bound interfaces into the bidirectional equivalence `miller_bach_prime_iff_all_prime_bases` and `least_nonresidue_has_prime_witness`.
-2. **Published explicit analytic bounds:** Bach (1990, Theorem 2), Lamzouri, Li & Soundararajan (2015, Corollaries 1.1 & 1.2), and Carneiro, Milinovich & Soundararajan (2019, Theorem 5).
-3. **Upstream zero-free half-plane hypotheses:** `DirichletLNonvanishingRightOfHalf` and `RiemannZetaZerosOnLine` match Levent Alpoge's `Statements.lean` (20 November 2026, kernel-replayed in Lean 4; human peer review ongoing) verbatim. All `u64` operations (`is_prime_u64`) are unconditional.
+## Contributing and security
 
-## Verification
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-RUSTFLAGS="-D warnings" cargo test --release
-RUSTFLAGS="-D warnings" cargo check --no-default-features
-RUSTFLAGS="-D warnings" cargo check --target wasm32-unknown-unknown --no-default-features
-python3 scripts/crosscheck.py
-```
-
-To replay the Lean 4 modules against a compiled Mathlib4 workspace:
-
-```sh
-MATHLIB_DIR=/path/to/mathlib4 ./lean/replay.sh
-```
+See [`CONTRIBUTING.md`](https://github.com/san-digital/det-prime/blob/main/CONTRIBUTING.md) for how to build, test, and replay the Lean proofs. Please report security issues privately as described in [`SECURITY.md`](https://github.com/san-digital/det-prime/blob/main/SECURITY.md).
 
 ## License
 

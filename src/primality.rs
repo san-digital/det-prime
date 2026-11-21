@@ -1,3 +1,5 @@
+//! Primality tests: [`is_prime_u64`], [`is_prime`], and [`verify_miller_bach`].
+
 use crate::bounds::{bach_witness_bound, MAX_SIEVE_BITS};
 use crate::sieve::{PrimeIter, MAX_SIEVE_LIMIT, SMALL_ODD_PRIMES};
 use crate::uint::{MontCtx, Uint};
@@ -17,7 +19,11 @@ pub enum CompositeWitness {
     ModulusTooLarge,
 }
 
-/// Deterministic verification record returned when Miller-Bach accepts `n`.
+/// Summary of a successful [`verify_miller_bach`] run.
+///
+/// This records which bases were tried. It is not a primality certificate that a third
+/// party can check without re-running the test, and it inherits the GRH assumption
+/// described on [`verify_miller_bach`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PrimalityCertificate {
     /// Certified integer bound `B >= floor(2 * (ln n)^2)` up to which prime bases apply.
@@ -26,9 +32,11 @@ pub struct PrimalityCertificate {
     pub bases_tested: u32,
 }
 
-/// Unconditional deterministic 64-bit primality test using the 7-base Jim Sinclair
-/// witness set `[2, 325, 9375, 28178, 450775, 9780504, 1795265022]`, proven exact
-/// across all `0 <= n < 2^64`.
+/// Primality test for `u64`. Always correct: no unproven hypothesis is involved.
+///
+/// Runs Miller-Rabin with Jim Sinclair's 7 bases
+/// `[2, 325, 9375, 28178, 450775, 9780504, 1795265022]`, which are known (by exhaustive
+/// computation) to give the right answer for every `n < 2^64`.
 pub fn is_prime_u64(n: u64) -> bool {
     if n < 2 {
         return false;
@@ -93,11 +101,14 @@ fn strong_probable_prime_u64(a: u64, n: u64, d: u64, s: u32) -> bool {
     false
 }
 
-/// Runs the full deterministic prime-base Miller-Bach test up to `B = bach_witness_bound(n)`.
+/// Runs Miller-Rabin with every prime base up to `B = bach_witness_bound(n)` (about
+/// `2 * (ln n)^2`) and reports either a summary or the reason `n` is composite.
 ///
-/// Under `DirichletLNonvanishingRightOfHalf` (and Bach 1990, Theorem 2 + Euler-Jacobi
-/// prime-witness reduction in `lean/PrimeWitness.lean`), this test has zero false positives
-/// on all inputs up to 4096 bits without using randomness.
+/// A prime `n` is always accepted; that part needs no assumption. Rejecting every composite
+/// relies on Bach's theorem (1990, Theorem 2), which assumes the Generalized Riemann
+/// Hypothesis (GRH). If GRH holds, this test never accepts a composite up to 4096 bits.
+/// GRH is unproven, so treat a pass for `n >= 2^64` as "prime, assuming GRH". See
+/// `PROOF.md` and `lean/DetPrime/PrimeWitness.lean` for the details.
 pub fn verify_miller_bach<const LIMBS: usize>(
     n: &Uint<LIMBS>,
 ) -> Result<PrimalityCertificate, CompositeWitness> {
@@ -219,10 +230,13 @@ pub(crate) fn strong_probable_prime_mont<const LIMBS: usize>(
     false
 }
 
-/// Deterministic, zero-entropy primality test.
+/// Primality test for fixed-width integers. Uses no randomness.
 ///
-/// Uses the unconditional 7-base witness set when `n < 2^64`, and the prime-base
-/// Miller-Bach test up to `2 * (ln n)^2` when `2^64 <= n < 2^4096`.
+/// - `n < 2^64`: calls [`is_prime_u64`]. Always correct.
+/// - `2^64 <= n < 2^4096`: calls [`verify_miller_bach`]. A prime always returns `true`.
+///   A composite returns `false` provided the Generalized Riemann Hypothesis (GRH) holds.
+///
+/// The running time and branches depend on `n`, so do not use this on secret values.
 ///
 /// Returns `false` for `n >= 2^4096` (reachable only with `LIMBS > 64`) without testing it;
 /// call [`verify_miller_bach`] to tell that case (`CompositeWitness::ModulusTooLarge`) apart

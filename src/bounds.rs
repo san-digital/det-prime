@@ -1,3 +1,5 @@
+//! Integer upper bounds on `ln n` and the search limits derived from it (no floating point).
+
 use crate::uint::Uint;
 
 /// Maximum input bit width supported by the stack-allocated prime sieve (`4096` bits).
@@ -16,7 +18,7 @@ pub const LOG_SCALE_SQ: u128 = LOG_SCALE * LOG_SCALE;
 /// `n < 2^k * (17 + m) / 16`.
 ///
 /// Uses `ln((17 + m)/16) <= min((m + 1)/16, ln(2) - (15 - m)/32)`.
-/// Proved strictly above `10^10 * ln(n)` in `lean/LogBounds.lean`.
+/// Proved strictly above `10^10 * ln(n)` in `lean/DetPrime/LogBounds.lean`.
 #[inline]
 pub const fn ln_upper_scaled(k: u32, m: u32) -> u128 {
     let m_clamped = if m > 15 { 15 } else { m } as u128;
@@ -31,7 +33,7 @@ pub const fn ln_upper_scaled(k: u32, m: u32) -> u128 {
 }
 
 /// Certified integer upper bound `B` such that every positive integer `a < 2 * (ln n)^2`
-/// satisfies `a <= B`. Matches `DetPrime.bachBound` in `lean/LogBounds.lean`.
+/// satisfies `a <= B`. Matches `DetPrime.bachBoundFromKm` in `lean/DetPrime/LogBounds.lean`.
 #[inline]
 pub const fn bach_bound_from_km(k: u32, m: u32) -> u64 {
     let ln_hi = ln_upper_scaled(k, m);
@@ -39,14 +41,15 @@ pub const fn bach_bound_from_km(k: u32, m: u32) -> u64 {
 }
 
 /// Certified integer upper bound `B` such that every positive integer `a < (ln n)^2`
-/// satisfies `a <= B`. Matches `DetPrime.llsBound` in `lean/LogBounds.lean`.
+/// satisfies `a <= B`. Matches `DetPrime.llsBoundFromKm` in `lean/DetPrime/LogBounds.lean`.
 #[inline]
 pub const fn lls_bound_from_km(k: u32, m: u32) -> u64 {
     let ln_hi = ln_upper_scaled(k, m);
     ((ln_hi * ln_hi) / LOG_SCALE_SQ) as u64
 }
 
-/// Bach (1990, Theorem 2) witness bound `floor(2 * ln_hi(n)^2)` for `n >= 2`.
+/// Bach (1990, Theorem 2) witness bound `floor(2 * ln_hi(n)^2)` for `n >= 2`, where `ln_hi(n)`
+/// is a slightly rounded-up `ln n`. Bach's theorem that this many bases suffice assumes GRH.
 #[inline]
 pub const fn bach_witness_bound<const LIMBS: usize>(n: &Uint<LIMBS>) -> u64 {
     let (k, m) = n.log2_mantissa4();
@@ -108,8 +111,10 @@ pub fn progression_prime_bound(q: u64, phi_q: u64) -> Option<u128> {
 }
 
 /// Carneiro, Milinovich, and Soundararajan (2019, Theorem 5) prime-gap step bound
-/// `p_{next} - x <= (22/25) * sqrt(x) * ln(x)` under RH for `4 <= x < 2^64`.
-/// Returns an upper bound on the number of odd candidates `(x_odd + 2*j)` required.
+/// `p_{next} - x <= (22/25) * sqrt(x) * ln(x)`, which assumes the Riemann Hypothesis, for
+/// `4 <= x < 2^64`. Returns an upper bound on the number of odd candidates `(x_odd + 2*j)`
+/// needed to reach the next prime. Nothing in this crate calls it; it is a helper for
+/// choosing a `max_odd_steps` for [`crate::next_prime_bounded`].
 pub fn rh_next_prime_step_budget_u64(x: u64) -> u64 {
     if x < 4 {
         return 2;
