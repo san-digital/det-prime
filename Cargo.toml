@@ -1,0 +1,19 @@
+[package]
+name = "det-prime"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "Apache-2.0"
+description = "Deterministic, zero-entropy primality testing, prime hashing, and modular square roots backed by Dirichlet-GRH witness bounds."
+repository = "https://github.com/san-digital/det-prime"
+readme = "README.md"
+keywords = ["primality", "cryptography", "no-std", "wasm", "number-theory"]
+categories = ["cryptography", "mathematics", "no-std", "wasm"]
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+
+[workspace]
