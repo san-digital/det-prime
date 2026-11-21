@@ -223,6 +223,10 @@ pub(crate) fn strong_probable_prime_mont<const LIMBS: usize>(
 ///
 /// Uses the unconditional 7-base witness set when `n < 2^64`, and the prime-base
 /// Miller-Bach test up to `2 * (ln n)^2` when `2^64 <= n < 2^4096`.
+///
+/// Returns `false` for `n >= 2^4096` (reachable only with `LIMBS > 64`) without testing it;
+/// call [`verify_miller_bach`] to tell that case (`CompositeWitness::ModulusTooLarge`) apart
+/// from a composite.
 pub fn is_prime<const LIMBS: usize>(n: &Uint<LIMBS>) -> bool {
     if let Some(v) = n.as_u64() {
         return is_prime_u64(v);

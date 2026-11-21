@@ -97,7 +97,12 @@ pub fn least_nonresidue<const LIMBS: usize>(p: &Uint<LIMBS>) -> Result<u64, Erro
 /// Given `0 <= a < p`, returns:
 /// - `Ok(Some(r))` with `0 <= r <= (p - 1)/2` and `r^2 == a (mod p)` if `a` is a square mod `p`,
 /// - `Ok(None)` if `a` is a quadratic non-residue mod `p`,
-/// - `Err(_)` if `p` is invalid/composite or `a >= p`.
+/// - `Err(_)` if `p` is even or `< 3`, `a >= p`, or `p` is detected to be composite.
+///
+/// `p` must be prime: this function does not run a primality test. A composite `p` is
+/// rejected only when it breaks Euler's criterion or the Tonelli-Shanks invariants, so it
+/// can still return `Ok(Some(r))` (with `r^2 == a (mod p)` verified) or `Ok(None)`. Check
+/// untrusted moduli with [`is_prime`] first.
 pub fn sqrt_mod_prime<const LIMBS: usize>(
     a: &Uint<LIMBS>,
     p: &Uint<LIMBS>,
@@ -218,27 +223,49 @@ pub const DEFAULT_HASH_TO_PRIME_STEPS: u32 = 16_384;
 ///
 /// Clears bit 255 (avoiding overflow near `2^256 - 1`), sets bit 254 (enforcing 255-bit
 /// security floor), sets bit 0 (odd), and steps by `+2` using deterministic Miller-Bach.
+/// The scan wraps from `2^255 - 1` back to `2^254 + 1`, so digests that land above the
+/// largest prime below `2^255` (`2^255 - 19`) still map into the range.
 pub fn hash_to_prime_256(digest: &[u8; 32]) -> Result<(U256, u32), Error> {
     hash_to_prime_256_bounded(digest, DEFAULT_HASH_TO_PRIME_STEPS)
 }
+
+/// Smallest odd candidate `2^254 + 1` of `hash_to_prime_256`.
+const HASH_TO_PRIME_LOW: U256 = U256::from_limbs([1, 0, 0, 1 << 62]);
+
+/// Largest odd candidate `2^255 - 1` of `hash_to_prime_256`.
+const HASH_TO_PRIME_HIGH: U256 = U256::from_limbs([u64::MAX, u64::MAX, u64::MAX, u64::MAX >> 1]);
 
 /// Configurable step-cap variant of `hash_to_prime_256`.
 pub fn hash_to_prime_256_bounded(
     digest: &[u8; 32],
     max_odd_steps: u32,
 ) -> Result<(U256, u32), Error> {
+    if max_odd_steps == 0 {
+        return Err(Error::StepBudgetExceeded);
+    }
     let mut buf = *digest;
     buf[0] = (buf[0] & 0x7f) | 0x40;
     buf[31] |= 0x01;
-    let start = U256::from_be_bytes(&buf)?;
-    next_prime_bounded(&start, max_odd_steps)
+    let mut cand = U256::from_be_bytes(&buf)?;
+    for step in 1..=max_odd_steps {
+        if is_prime(&cand) {
+            return Ok((cand, step));
+        }
+        cand = if cand == HASH_TO_PRIME_HIGH {
+            HASH_TO_PRIME_LOW
+        } else {
+            cand.checked_add_u64(2).ok_or(Error::Overflow)?
+        };
+    }
+    Err(Error::StepBudgetExceeded)
 }
 
 /// Finds the smallest prime `p == a (mod q)` for `q > 3` and `gcd(a, q) == 1`.
 ///
 /// Under `DirichletLNonvanishingRightOfHalf` (Lamzouri, Li, and Soundararajan 2015,
 /// Corollary 1.2), such a prime exists with `p <= (phi(q) * ln q)^2`.
-/// Returns `(prime, progression_steps_tested)`.
+/// Returns `(prime, progression_steps_tested)`, or `Err(StepBudgetExceeded)` when no such
+/// prime lies below both that bound and `u64::MAX`.
 pub fn prime_in_progression_u64(q: u64, a: u64) -> Result<(u64, u64), Error> {
     if q <= 3 {
         return Err(Error::InvalidModulus);
@@ -248,8 +275,8 @@ pub fn prime_in_progression_u64(q: u64, a: u64) -> Result<(u64, u64), Error> {
         return Err(Error::NotCoprime);
     }
     let phi = euler_totient_u64(q);
-    let bound = progression_prime_bound(q, phi).ok_or(Error::Overflow)?;
-    let cap = bound.min(u64::MAX as u128) as u64;
+    // For large `q` the bound overflows `u128`; the scan is capped at `u64::MAX` either way.
+    let cap = progression_prime_bound(q, phi).map_or(u64::MAX, |b| b.min(u64::MAX as u128) as u64);
 
     let mut cand = rem;
     let mut steps = 0u64;
