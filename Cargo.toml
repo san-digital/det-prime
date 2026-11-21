@@ -11,6 +11,16 @@ documentation = "https://docs.rs/det-prime"
 readme = "README.md"
 keywords = ["primality", "cryptography", "no-std", "wasm", "number-theory"]
 categories = ["cryptography", "mathematics", "no-std", "wasm"]
+include = [
+    "/src/",
+    "/tests/",
+    "/examples/",
+    "/lean/",
+    "/README.md",
+    "/PROOF.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
 
 [features]
 default = ["std"]
